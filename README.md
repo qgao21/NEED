@@ -27,3 +27,4 @@ This is the official implementation of the paper "Noise-Inspired Diffusion Model
 
 ## Acknowledge
 - Our codebase builds heavily on [denoising-diffusion-pytorch](https://github.com/lucidrains/denoising-diffusion-pytorch), [Cold Diffusion](https://github.com/arpitbansal297/Cold-Diffusion-Models), and, [DU-GAN](https://github.com/Hzzone/DU-GAN). Thanks for open-sourcing!
+- We use the [ASTRA Toolbox](https://astra-toolbox.com/) for low-dose CT data simulation and leverage the [TorchRadon Toolbox](https://github.com/matteo-ronchetti/torch-radon) for fast FBP reconstruction. Thank you for open-sourcing these valuable tools!
