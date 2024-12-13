@@ -4,12 +4,9 @@ This is the official implementation of the paper "Noise-Inspired Diffusion Model
 ## Updates
 - Dec, 2024: initial commit.
 
-
 ## Data Preparation
 - The AAPM-Mayo dataset can be found from: [Mayo 2016](https://ctcicblog.mayo.edu/2016-low-dose-ct-grand-challenge/). 
 - The "Low Dose CT Image and Projection Data" can be found from [Mayo 2020](https://wiki.cancerimagingarchive.net/pages/viewpage.action?pageId=52758026#527580262a84e4aa87794b6583c78dccf041269f).
-
-## Training & Inference
 
 ## Requirements
 ```
@@ -30,5 +27,5 @@ This is the official implementation of the paper "Noise-Inspired Diffusion Model
 ```
 
 ## Acknowledge
-- Our codebase builds heavily on [DU-GAN](https://github.com/Hzzone/DU-GAN) and [Cold Diffusion](https://github.com/arpitbansal297/Cold-Diffusion-Models). Thanks for open-sourcing!
+- Our codebase builds heavily on [denoising-diffusion-pytorch](https://github.com/lucidrains/denoising-diffusion-pytorch), [Cold Diffusion](https://github.com/arpitbansal297/Cold-Diffusion-Models), and, [DU-GAN](https://github.com/Hzzone/DU-GAN). Thanks for open-sourcing!
 ```
