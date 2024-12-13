@@ -17,7 +17,6 @@ This is the official implementation of the paper "Noise-Inspired Diffusion Model
 - torchvision=0.11.2
 - numpy=1.23.1
 - scipy==1.10.1
-- h5py=3.7.0
 - pydicom=2.3.1
 - natsort=8.2.0
 - scikit-image=0.21.0
