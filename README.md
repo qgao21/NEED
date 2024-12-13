@@ -28,4 +28,3 @@ This is the official implementation of the paper "Noise-Inspired Diffusion Model
 
 ## Acknowledge
 - Our codebase builds heavily on [denoising-diffusion-pytorch](https://github.com/lucidrains/denoising-diffusion-pytorch), [Cold Diffusion](https://github.com/arpitbansal297/Cold-Diffusion-Models), and, [DU-GAN](https://github.com/Hzzone/DU-GAN). Thanks for open-sourcing!
-```
