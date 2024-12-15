@@ -1,17 +1,8 @@
-import os
 import os.path as osp
 from glob import glob
 from torch.utils.data import Dataset
 import numpy as np
-import torch
 from functools import partial
-import torch.nn.functional as F
-import math
-import random
-import cv2
-import sys
-import copy
-from skimage import transform
 
 
 class CTDataset(Dataset):
