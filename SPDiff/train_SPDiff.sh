@@ -1,0 +1,12 @@
+CUDA_VISIBLE_DEVICES=0 python main.py\
+  --model_name SPDiff\
+  --batch_size 8\
+  --run_name dose2_mayo2016\
+  --dose 2\
+  --max_iter 100000\
+  --save_freq 2500\
+  --data_type sino\
+  --img_size 672\
+  --context\
+  --in_channels 3\
+  --wandb
