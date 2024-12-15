@@ -70,8 +70,6 @@ class Diffusion(nn.Module):
         b, c, h, w, device, img_size, = *y.shape, y.device, self.img_size
         assert h == img_size and w == img_size, f'height and width of image must be {img_size}'
 
-        # t_single = torch.randint(0, self.num_timesteps, (1,), device=device).long()
-        # t = t_single.repeat((b,))
         t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
 
         if self.context:
