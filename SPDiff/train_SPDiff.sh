@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=0 python main.py\
+CUDA_VISIBLE_DEVICES=gpu_id python main.py\
   --model_name SPDiff\
   --batch_size 8\
   --run_name dose2_mayo2016\
@@ -8,5 +8,4 @@ CUDA_VISIBLE_DEVICES=0 python main.py\
   --data_type sino\
   --img_size 672\
   --context\
-  --in_channels 3\
-  --wandb
+  --in_channels 3
