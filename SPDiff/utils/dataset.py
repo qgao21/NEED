@@ -13,8 +13,6 @@ import sys
 import copy
 from skimage import transform
 
-from ipdb import set_trace
-
 
 class CTDataset(Dataset):
     def __init__(self, npy_root, mode, dose=2, context=True, data_type='img', norm_min=-1024, norm_max=3072):
