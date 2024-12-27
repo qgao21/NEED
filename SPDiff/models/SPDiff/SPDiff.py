@@ -1,3 +1,4 @@
+import os
 import os.path as osp
 from torchvision.utils import make_grid, save_image
 from torch_radon import RadonFanbeam
@@ -157,7 +158,7 @@ class SPDiff(TrainTask):
             self.step_ema(n_iter)
 
     @torch.no_grad()
-    def test(self, n_iter, up_log=True):
+    def test(self, n_iter, up_log=True, save_data=False):
         opt = self.opt
         self.ema_model.eval()
 
@@ -174,6 +175,7 @@ class SPDiff(TrainTask):
             match_t = self.calculate_match_t(ld_I0)
 
         idx = 0
+        gen_full_doses = []
         for low_dose, full_dose in tqdm.tqdm(self.test_loader, desc='test'):
             if self.context:
                 full_dose = full_dose[:, 1].unsqueeze(1)
@@ -192,6 +194,9 @@ class SPDiff(TrainTask):
             )
             idx += 1
 
+            if save_data:
+                gen_full_dose_save = self.transfer_HU(gen_full_dose)
+                gen_full_doses.append(gen_full_dose_save)
             gen_full_dose = self.recon(gen_full_dose, self.radon, self.u_water, self.kappa)
             full_dose = self.recon(full_dose, self.radon, self.u_water, self.kappa)
             full_dose = self.transfer_calculate_window(full_dose)
@@ -206,6 +211,18 @@ class SPDiff(TrainTask):
         self.logger.msg([psnr, ssim, rmse], n_iter)
         if up_log and opt.wandb:
             wandb.log({'epoch': n_iter, 'PSNR': psnr, 'SSIM': ssim, 'RMSE': rmse})
+
+        if save_data:
+            if opt.test_dataset == 'mayo2020':
+                save_root = osp.join(opt.npy_root, 'NEED/Dataset/phase_one/data_mayo2020')
+                os.makedirs(save_root, exist_ok=True)
+                file_name = osp.join(save_root, opt.model_name + '_{}.npy'.format(opt.test_iter))
+                np.save(file_name, torch.stack(gen_full_doses).squeeze_().cpu().detach().numpy())
+            else:
+                save_root = osp.join(opt.npy_root, 'NEED/Dataset/phase_one/data_mayo2016')
+                os.makedirs(save_root, exist_ok=True)
+                file_name = osp.join(save_root, opt.model_name + '_{}_{}.npy'.format(opt.test_iter, opt.dose))
+                np.save(file_name, torch.stack(gen_full_doses).squeeze_().cpu().detach().numpy())
 
     @torch.no_grad()
     def generate_images(self, n_iter):
@@ -260,4 +277,4 @@ class SPDiff(TrainTask):
         fake_imgs = torch.stack([low_dose, full_dose, gen_full_dose])
         fake_imgs = self.transfer_display_window(fake_imgs)
         fake_imgs = fake_imgs.transpose(1, 0).reshape((-1, c, w, h))
-        self.logger.save_image(make_grid(fake_imgs, nrow=3), n_iter, 'test_{}_{}'.format(self.dose, match_t))
+        self.logger.save_image(make_grid(fake_imgs, nrow=3), n_iter, 'test_{}'.format(self.dose, match_t))
