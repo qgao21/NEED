@@ -1,28 +1,18 @@
-import os
 import os.path as osp
 from glob import glob
 from torch.utils.data import Dataset
 import numpy as np
-import torch
 from functools import partial
-import torch.nn.functional as F
-import math
-import random
-import cv2
-import sys
-import copy
-from skimage import transform
 
 
 class CTDataset(Dataset):
-    def __init__(self, npy_root, mode, dose=2, context=True, data_type='img', norm_min=-1024, norm_max=3072, model_name=None):
+    def __init__(self, npy_root, mode, dose=2, context=True, data_type='img', norm_min=-1024, norm_max=3072):
         self.mode = mode
         self.dose = dose
         self.context = context
         self.data_type = data_type
         self.norm_min = norm_min
         self.norm_max = norm_max
-        self.model_name = model_name
 
         if mode == 'train':
             patient_ids = [67, 96, 109, 192, 286, 291, 310, 333]
@@ -31,9 +21,9 @@ class CTDataset(Dataset):
         elif mode == 'mayo2020':
             patient_ids = ['C052', 'C232', 'C016', 'C120', 'C050', 'L077', 'L056', 'L186', 'L006', 'L148']
             if data_type == 'img':
-                data_root = osp.join(npy_root, 'Dataset/gen_data/mayo_2020_sim_img_npy/')
+                data_root = osp.join(npy_root, 'mayo2020_img_path')
             elif data_type == 'sino':
-                data_root = osp.join(npy_root, 'Dataset/gen_data/mayo_2020_sim_sino_npy/')
+                data_root = osp.join(npy_root, 'mayo2020_sino_path/')
 
             middle_slices = np.array([169, 512, 844, 1173, 1516, 1766, 1889, 2016, 2169, 2317])
             for i in range(10):
@@ -45,9 +35,9 @@ class CTDataset(Dataset):
 
         if mode in ['train', 'test']:
             if data_type == 'img':
-                data_root = osp.join(npy_root, 'Dataset/gen_data/mayo_2016_astra_sim_torch_radon_img2/')
+                data_root = osp.join(npy_root, 'mayo2016_img_path/')
             elif data_type == 'sino':
-                data_root = osp.join(npy_root, 'Dataset/gen_data/mayo_2016_astra_sim_torch_radon_sino2/')
+                data_root = osp.join(npy_root, 'mayo2016_sino_path/')
 
             patient_lists = []
             for ind, id in enumerate(patient_ids):
@@ -85,7 +75,7 @@ class CTDataset(Dataset):
             patient_lists = []
             for ind, id in enumerate(patient_ids):
                 if self.data_type == 'img':
-                    patient_list = sorted(glob(osp.join(data_root, id + '_' + '*_target_radon_{}.npy'.format(data_type))))
+                    patient_list = sorted(glob(osp.join(data_root, id + '_' + '*_target_{}.npy'.format(data_type))))
                 else:
                     patient_list = sorted(glob(osp.join(data_root, id + '_' + '*_target_{}.npy'.format(data_type))))
                 if context:
@@ -105,7 +95,7 @@ class CTDataset(Dataset):
             patient_lists = []
             for ind, id in enumerate(patient_ids):
                 if self.data_type == 'img':
-                    patient_list = sorted(glob(osp.join(data_root, id + '_' + '*_input_radon_{}.npy'.format(data_type))))
+                    patient_list = sorted(glob(osp.join(data_root, id + '_' + '*_input_{}.npy'.format(data_type))))
                 else:
                     patient_list = sorted(glob(osp.join(data_root, id + '_' + '*_input_{}.npy'.format(data_type))))
 
