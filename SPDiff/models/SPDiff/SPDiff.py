@@ -104,7 +104,6 @@ class SPDiff(TrainTask):
 
     def q_sample(self, x_start, t):
         lambda_t = extract(self.lambda_, t, x_start.shape)
-        print(lambda_t)
         return torch.poisson(lambda_t * x_start + 10) / lambda_t
 
     def reset_parameters(self):
