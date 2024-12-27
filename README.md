@@ -8,6 +8,34 @@ This is the official implementation of the paper "Noise-Inspired Diffusion Model
 - The AAPM-Mayo dataset can be found from: [Mayo 2016](https://ctcicblog.mayo.edu/2016-low-dose-ct-grand-challenge/). 
 - The "Low Dose CT Image and Projection Data" can be found from [Mayo 2020](https://wiki.cancerimagingarchive.net/pages/viewpage.action?pageId=52758026#527580262a84e4aa87794b6583c78dccf041269f).
 
+## Training & Inference
+### SPDiff
+SPDiff is a Shifted Poisson Model designed for pre-log projection data denoising. This guide will help you set up and run the training and inference scripts necessary to utilize SPDiff effectively.
+#### Getting Started
+- Ensure that your data is prepared and formatted correctly.
+- Make sure you have the necessary permissions to execute shell scripts.
+### Training the Shifted Poisson Model
+Once your data is ready, follow these steps to train the Shifted Poisson Model (SPDiff):
+1. **Navigate to the SPDiff Directory**
+    ```bash
+    cd SPDiff
+    ```
+2. **Run the Training Script**
+
+    ```bash
+    sh train.sh
+    ```
+    This script will initiate the training process for the SPDiff model using your prepared data.
+### Running Inference and Saving Phase One Data
+After training the model, you can perform inference and save the first phase of data by executing the following script:
+1. **Run the Inference Script**
+
+    ```bash
+    sh test.sh
+    ```
+
+    This script will run the inference process and store the results of the first phase.
+
 ## Requirements
 ```
 - Linux Platform
