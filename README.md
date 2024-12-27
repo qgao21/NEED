@@ -15,7 +15,7 @@ SPDiff is a shifted poisson diffusion model designed for pre-log projection data
 #### Getting Started
 - Ensure that your data is prepared and formatted correctly.
 - Make sure you have the necessary permissions to execute shell scripts.
-#### Training the Shifted Poisson Model
+#### Training the Shifted Poisson Diffusion Model
 Once your data is ready, follow these steps to train the Shifted Poisson Model (SPDiff):
 1. **Navigate to the SPDiff Directory**
     ```bash
@@ -27,6 +27,25 @@ Once your data is ready, follow these steps to train the Shifted Poisson Model (
     ```
 #### Running Inference and Saving Phase One Data
 After training the model, you can perform inference and save the first phase of data by executing the following script:
+1. **Run the Inference Script**
+    ```bash
+    sh test.sh
+    ```
+
+### DGDiff
+DGDiff is a doubly guided diffusion model designed for reconstruction image refinement. This guide will help you set up and run the training and inference scripts necessary to utilize DGDiff effectively.
+#### Training the Doubly Guided Diffusion Model
+Once your data is ready, follow these steps to train the doubly guided diffusion model (DGDiff):
+1. **Navigate to the DGDiff Directory**
+    ```bash
+    cd DGDiff
+    ```
+2. **Run the Training Script**
+    ```bash
+    sh train.sh
+    ```
+#### Running Inference and Saving Phase Two Data
+After training the DGDiffmodel, you can perform inference and save the second phase of data by executing the following script:
 1. **Run the Inference Script**
     ```bash
     sh test.sh
