@@ -13,8 +13,6 @@ import sys
 import copy
 from skimage import transform
 
-from ipdb import set_trace
-
 
 class CTDataset(Dataset):
     def __init__(self, npy_root, mode, dose=2, context=True, data_type='img', norm_min=-1024, norm_max=3072, model_name=None):
@@ -130,7 +128,6 @@ class CTDataset(Dataset):
         print(len(self.input))
         print(len(self.target))
 
-
     def __getitem__(self, index):
         input, target = self.input[index], self.target[index]
         if self.context:
@@ -167,6 +164,7 @@ class CTDataset(Dataset):
         elif self.data_type == 'sino':
             img = img / 1000
         return img
+
 
 dataset_dict = {
     'train': partial(CTDataset, npy_root='', mode='train', dose=2, context=True, data_type='img', norm_min=-1024, norm_max=3072),
