@@ -13,8 +13,6 @@ from utils.sampler import RandomSampler
 from utils.ops import load_network
 import wandb
 
-from ipdb import set_trace
-
 
 class TrainTask(object):
 
@@ -84,7 +82,7 @@ class TrainTask(object):
 
     def set_loader(self):
         opt = self.opt
-        opt.npy_root = '/mnt/miah203/qgao/'
+        opt.npy_root = 'your root path'
 
         train_dataset = dataset_dict[opt.train_dataset](
             npy_root = opt.npy_root,
