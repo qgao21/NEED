@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=0 python main.py\
+CUDA_VISIBLE_DEVICES=gpu_id python main.py\
   --model_name SPDiff\
   --test_batch_size 1\
   --run_name dose2_mayo2016\
