@@ -10,11 +10,11 @@ This is the official implementation of the paper "Noise-Inspired Diffusion Model
 
 ## Training & Inference
 ### SPDiff
-SPDiff is a Shifted Poisson Model designed for pre-log projection data denoising. This guide will help you set up and run the training and inference scripts necessary to utilize SPDiff effectively.
+SPDiff is a shifted poisson diffusion model designed for pre-log projection data denoising. This guide will help you set up and run the training and inference scripts necessary to utilize SPDiff effectively.
 #### Getting Started
 - Ensure that your data is prepared and formatted correctly.
 - Make sure you have the necessary permissions to execute shell scripts.
-### Training the Shifted Poisson Model
+#### Training the Shifted Poisson Model
 Once your data is ready, follow these steps to train the Shifted Poisson Model (SPDiff):
 1. **Navigate to the SPDiff Directory**
     ```bash
@@ -26,7 +26,7 @@ Once your data is ready, follow these steps to train the Shifted Poisson Model (
     sh train.sh
     ```
     This script will initiate the training process for the SPDiff model using your prepared data.
-### Running Inference and Saving Phase One Data
+#### Running Inference and Saving Phase One Data
 After training the model, you can perform inference and save the first phase of data by executing the following script:
 1. **Run the Inference Script**
 
