@@ -1,0 +1,11 @@
+CUDA_VISIBLE_DEVICES=0 python main.py\
+  --model_name SPDiff\
+  --test_batch_size 1\
+  --run_name dose2_mayo2016\
+  --dose 2\
+  --test_iter 100000\
+  --data_type sino\
+  --img_size 672\
+  --context\
+  --in_channels 3\
+  --mode test
