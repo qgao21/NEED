@@ -19,12 +19,12 @@ SPDiff is a shifted poisson diffusion model designed for pre-log projection data
 Once your data is ready, follow these steps to train the Shifted Poisson Model (SPDiff):
 ```
 cd SPDiff
-sh train.sh
+sh train_SPDiff.sh
 ```
 #### Running Inference and Saving Phase One Data
 After training the model, you can perform inference and save the first phase of data by executing the following script:
 ```
-sh test.sh
+sh test_SPDiff.sh
 ```
 
 ### DGDiff
@@ -33,12 +33,12 @@ DGDiff is a doubly guided diffusion model designed for reconstruction image refi
 Once the SPDiff model has been trained and the first phase of data has been saved, follow these steps to train the doubly guided diffusion model (DGDiff):
 ```
 cd DGDiff
-sh train.sh
+sh train_DGDiff.sh
 ```
 #### Running Inference and Saving Phase Two Data
 After training the DGDiff model, you can perform inference and save the second phase of data by executing the following script:
 ```
-sh test.sh
+sh test_DGDiff.sh
 ```
 
 ## Requirements
