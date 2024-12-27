@@ -277,4 +277,4 @@ class SPDiff(TrainTask):
         fake_imgs = torch.stack([low_dose, full_dose, gen_full_dose])
         fake_imgs = self.transfer_display_window(fake_imgs)
         fake_imgs = fake_imgs.transpose(1, 0).reshape((-1, c, w, h))
-        self.logger.save_image(make_grid(fake_imgs, nrow=3), n_iter, 'test_{}'.format(self.dose, match_t))
+        self.logger.save_image(make_grid(fake_imgs, nrow=3), n_iter, 'test_{}'.format(self.dose))
