@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=3 python main.py \
+CUDA_VISIBLE_DEVICES=gpu_id python main.py \
   --mode train\
   --dataset mayo2016 \
   --dose 0 \
