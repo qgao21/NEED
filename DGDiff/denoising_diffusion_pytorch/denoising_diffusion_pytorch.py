@@ -10,7 +10,7 @@ import torch
 from torch import nn, einsum
 import torch.nn.functional as F
 from torch.nn import Module, ModuleList
-from torch.amp import autocast
+from torch.cuda.amp import autocast
 from torch.utils.data import Dataset, DataLoader
 
 from torch.optim import Adam
@@ -31,6 +31,9 @@ from accelerate import Accelerator
 from denoising_diffusion_pytorch.attend import Attend
 
 from denoising_diffusion_pytorch.version import __version__
+
+import os.path as osp
+from glob import glob
 
 # constants
 
@@ -291,7 +294,8 @@ class Unet(Module):
         attn_dim_head = 32,
         attn_heads = 4,
         full_attn = None,    # defaults to full attention only for inner most layer
-        flash_attn = False
+        flash_attn = False,
+        use_cond=False
     ):
         super().__init__()
 
@@ -302,7 +306,12 @@ class Unet(Module):
         input_channels = channels * (2 if self_condition else 1)
 
         init_dim = default(init_dim, dim)
-        self.init_conv = nn.Conv2d(input_channels, init_dim, 7, padding = 3)
+        # self.init_conv = nn.Conv2d(input_channels, init_dim, 7, padding = 3)
+        self.use_cond = use_cond
+        if use_cond:
+            self.init_conv = nn.Conv2d(input_channels, init_dim - 1, 7, padding=3)
+        else:
+            self.init_conv = nn.Conv2d(input_channels, init_dim, 7, padding=3)
 
         dims = [init_dim, *map(lambda m: dim * m, dim_mults)]
         in_out = list(zip(dims[:-1], dims[1:]))
@@ -397,6 +406,10 @@ class Unet(Module):
             x = torch.cat((x_self_cond, x), dim = 1)
 
         x = self.init_conv(x)
+
+        if self.use_cond:
+            x = torch.cat((x, cond), dim=1)
+
         r = x.clone()
 
         t = self.time_mlp(time)
@@ -680,6 +693,20 @@ class GaussianDiffusion(Module):
         return pred_img, x_start
 
     @torch.inference_mode()
+    def p_sample_improved(self, x, cond, init_img, low_dose, t: int, s1=1.0, s2=1.0, x_self_cond=None):
+        b, *_, device = *x.shape, self.device
+        batched_times = torch.full((b,), t, device=device, dtype=torch.long)
+
+        low_dose = low_dose * extract(self.sqrt_alphas_cumprod, batched_times, x.shape)
+        x = s1 * x + (1 - s1) * low_dose * extract(self.sqrt_alphas_cumprod, batched_times, x.shape)
+
+        model_mean, _, model_log_variance, x_start = self.p_mean_variance(x=x, cond=cond, t=batched_times, x_self_cond=x_self_cond, clip_denoised=True)
+        noise = torch.randn_like(x) if t > 0 else 0.  # no noise if t == 0
+        new_mean = s2 * model_mean + (1 - s2) * init_img
+        pred_img = new_mean + (0.5 * model_log_variance).exp() * noise
+        return pred_img, x_start
+
+    @torch.inference_mode()
     def p_sample_loop(self, shape, return_all_timesteps = False):
         batch, device = shape[0], self.device
 
@@ -695,6 +722,51 @@ class GaussianDiffusion(Module):
 
         ret = img if not return_all_timesteps else torch.stack(imgs, dim = 1)
 
+        ret = self.unnormalize(ret)
+        return ret
+
+    @torch.inference_mode()
+    def p_sample_loop_improved(self, shape, conds, init_imgs, low_doses, return_all_timesteps=False):
+        batch, device = shape[0], self.device
+        self_cond = x_start if self.self_condition else None
+
+        residuals = init_imgs - low_doses
+        est_stds = torch.abs(torch.std(residuals, dim=(1, 2, 3)))
+        est_vars = est_stds ** 2
+
+        match_t = torch.full((batch,), 0, device=device, dtype=torch.long)
+        for i in range(batch):
+            min_diff = 1000
+            for j in range(len(self.betas)):
+                diff = torch.abs(est_stds[i] - self.sqrt_one_minus_alphas_cumprod[j])
+                if diff < min_diff:
+                    min_diff = diff
+                    match_t[i] = j
+        resume_time = torch.div(match_t, 10, rounding_mode='floor')
+
+        s1 = 0.7 * torch.div((5000 * est_vars).exp(), (10 + (5000 * est_vars).exp()))
+        s2 = 0.8
+
+        imgs = self.q_sample(init_imgs, resume_time)
+        imgs_ = []
+        for i in range(batch):
+            img = imgs[i].unsqueeze(0)
+            init_img = init_imgs[i].unsqueeze(0)
+            low_dose = low_doses[i].unsqueeze(0)
+            if conds is not None:
+                cond = conds[i].unsqueeze(0)
+            else:
+                cond = conds
+
+            resume = resume_time[i].item()
+            if resume == 0:
+                resume = 1
+            for t in tqdm(reversed(range(0, resume)), desc='sampling loop time step', total=resume):
+                img, x_start = self.p_sample_improved(img, cond, init_img, low_dose, t, s1[i], s2, self_cond)
+            imgs_.append(img)
+        imgs_ = torch.stack(imgs_).squeeze(1)
+
+        ret = imgs_ if not return_all_timesteps else torch.cat((imgs, imgs_), dim=1)
         ret = self.unnormalize(ret)
         return ret
 
@@ -741,10 +813,60 @@ class GaussianDiffusion(Module):
         return ret
 
     @torch.inference_mode()
-    def sample(self, batch_size = 16, return_all_timesteps = False):
+    def ddim_sample_improved(self, shape, cond, return_all_timesteps=False):
+        batch, device, total_timesteps, sampling_timesteps, eta, objective = shape[
+            0], self.device, self.num_timesteps, self.sampling_timesteps, self.ddim_sampling_eta, self.objective
+
+        times = torch.linspace(-1, total_timesteps - 1,
+                               steps=sampling_timesteps + 1)  # [-1, 0, 1, 2, ..., T-1] when sampling_timesteps == total_timesteps
+        times = list(reversed(times.int().tolist()))
+        time_pairs = list(zip(times[:-1], times[1:]))  # [(T-1, T-2), (T-2, T-3), ..., (1, 0), (0, -1)]
+
+        img = torch.randn(shape, device=device)
+        imgs = [img]
+
+        x_start = None
+
+        for time, time_next in tqdm(time_pairs, desc='sampling loop time step'):
+            time_cond = torch.full((batch,), time, device=device, dtype=torch.long)
+            self_cond = x_start if self.self_condition else None
+            pred_noise, x_start, *_ = self.model_predictions(img, cond, time_cond, self_cond, clip_x_start=True, rederive_pred_noise=True)
+
+            if time_next < 0:
+                img = x_start
+                imgs.append(img)
+                continue
+
+            alpha = self.alphas_cumprod[time]
+            alpha_next = self.alphas_cumprod[time_next]
+
+            sigma = eta * ((1 - alpha / alpha_next) * (1 - alpha_next) / (1 - alpha)).sqrt()
+            c = (1 - alpha_next - sigma ** 2).sqrt()
+
+            noise = torch.randn_like(img)
+
+            img = x_start * alpha_next.sqrt() + \
+                  c * pred_noise + \
+                  sigma * noise
+
+            imgs.append(img)
+
+        ret = img if not return_all_timesteps else torch.stack(imgs, dim=1)
+
+        ret = self.unnormalize(ret)
+        return ret
+
+    @torch.inference_mode()
+    def sample(self, batch_size = 16, cond = None, init_img = None, low_dose = None, return_all_timesteps = False):
         (h, w), channels = self.image_size, self.channels
-        sample_fn = self.p_sample_loop if not self.is_ddim_sampling else self.ddim_sample
-        return sample_fn((batch_size, channels, h, w), return_all_timesteps = return_all_timesteps)
+        # sample_fn = self.p_sample_loop if not self.is_ddim_sampling else self.ddim_sample
+        # return sample_fn((batch_size, channels, h, w), return_all_timesteps=return_all_timesteps)
+        if not self.is_ddim_sampling:
+            sample_fn = self.p_sample_loop_improved
+            return sample_fn((batch_size, channels, image_size, image_size), cond, init_img, low_dose, return_all_timesteps=return_all_timesteps)
+        else:
+            sample_fn = self.ddim_sample_improved
+            return sample_fn((batch_size, channels, image_size, image_size), cond, return_all_timesteps=return_all_timesteps)
 
     @torch.inference_mode()
     def interpolate(self, x1, x2, t = None, lam = 0.5):
@@ -772,7 +894,7 @@ class GaussianDiffusion(Module):
         _, assign = linear_sum_assignment(dist.cpu())
         return torch.from_numpy(assign).to(dist.device)
 
-    @autocast('cuda', enabled = False)
+    @autocast(enabled = False)
     def q_sample(self, x_start, t, noise = None):
         noise = default(noise, lambda: torch.randn_like(x_start))
 
@@ -842,37 +964,128 @@ class GaussianDiffusion(Module):
 
 # dataset classes
 
-class Dataset(Dataset):
+# class Dataset(Dataset):
+#     def __init__(
+#         self,
+#         folder,
+#         image_size,
+#         exts = ['jpg', 'jpeg', 'png', 'tiff'],
+#         augment_horizontal_flip = False,
+#         convert_image_to = None
+#     ):
+#         super().__init__()
+#         self.folder = folder
+#         self.image_size = image_size
+#         self.paths = [p for ext in exts for p in Path(f'{folder}').glob(f'**/*.{ext}')]
+#
+#         maybe_convert_fn = partial(convert_image_to_fn, convert_image_to) if exists(convert_image_to) else nn.Identity()
+#
+#         self.transform = T.Compose([
+#             T.Lambda(maybe_convert_fn),
+#             T.Resize(image_size),
+#             T.RandomHorizontalFlip() if augment_horizontal_flip else nn.Identity(),
+#             T.CenterCrop(image_size),
+#             T.ToTensor()
+#         ])
+#
+#     def __len__(self):
+#         return len(self.paths)
+#
+#     def __getitem__(self, index):
+#         path = self.paths[index]
+#         img = Image.open(path)
+#         return self.transform(img)
+
+
+# add: Mayo2016 dataset class
+class Mayo2016_Dataset(Dataset):
     def __init__(
         self,
         folder,
-        image_size,
-        exts = ['jpg', 'jpeg', 'png', 'tiff'],
-        augment_horizontal_flip = False,
-        convert_image_to = None
+        mode='train',
+        dose=0,
+        use_cond=False,
+        image_size=512,
+        norm_min=-1024,
+        norm_max=3072,
     ):
         super().__init__()
-        self.folder = folder
+        self.mode = mode
+        self.dose = dose
+        self.norm_min = norm_min
+        self.norm_max = norm_max
+        self.use_cond = use_cond
         self.image_size = image_size
-        self.paths = [p for ext in exts for p in Path(f'{folder}').glob(f'**/*.{ext}')]
 
-        maybe_convert_fn = partial(convert_image_to_fn, convert_image_to) if exists(convert_image_to) else nn.Identity()
+        if mode == 'train':
+            patient_ids = [67, 96, 109, 192, 286, 291, 310, 333]
+        elif mode == 'test':
+            patient_ids = [143, 506]
 
-        self.transform = T.Compose([
-            T.Lambda(maybe_convert_fn),
-            T.Resize(image_size),
-            T.RandomHorizontalFlip() if augment_horizontal_flip else nn.Identity(),
-            T.CenterCrop(image_size),
-            T.ToTensor()
-        ])
+        if use_cond:
+            # image size: 512
+            input_root = osp.join(folder, 'your low-/normal-dose data root')
+            predata_root = osp.join(folder, 'Dataset/phase_two/pre_mayo2016/')
+            cond_root = osp.join(folder, 'Dataset/phase_two/cond_mayo2016/')
+        else:
+            # image size: 256
+            input_root = osp.join(folder, 'your low-/normal-dose data root (256)')
+            predata_root = osp.join(folder, 'Dataset/phase_two/pre_mayo2016_256/')
+            cond_root = predata_root
+        target_root = input_root
+
+        input_lists, target_lists, predata_lists, cond_lists = [], [], [], []
+        for ind, id in enumerate(patient_ids):
+            input_list = sorted(glob(osp.join(input_root, ('L{:03d}_'.format(id) + '*_{}_'.format(dose) + 'img.npy'))))
+            target_list = sorted(glob(osp.join(target_root, ('L{:03d}_'.format(id) + '*_0_img.npy'))))
+            predata_list = sorted(glob(osp.join(predata_root, ('L{:03d}_'.format(id) + '*_{}_'.format(dose) + 'img.npy'))))
+            cond_list = sorted(glob(osp.join(cond_root, ('L{:03d}_'.format(id) + '*_{}_'.format(dose) + 'img.npy'))))
+
+            input_list = input_list[1:len(input_list) - 1]
+            target_list = target_list[1:len(target_list) - 1]
+
+            input_lists = input_lists + input_list
+            target_lists = target_lists + target_list
+            predata_lists = predata_lists + predata_list
+            cond_lists = cond_lists + cond_list
+        self.input = input_lists
+        self.target = target_lists
+        self.predata = predata_lists
+        self.cond = cond_lists
 
     def __len__(self):
-        return len(self.paths)
+        return len(self.target)
+
+    def norm_(self, img, MIN_B=-1024, MAX_B=3072):
+        img = img - 1024
+        img[img < MIN_B] = MIN_B
+        img[img > MAX_B] = MAX_B
+        img = (img - MIN_B) / (MAX_B - MIN_B)
+        return img
 
     def __getitem__(self, index):
-        path = self.paths[index]
-        img = Image.open(path)
-        return self.transform(img)
+        input, target, predata, cond = self.input[index], self.target[index], self.predata[index], self.cond[index]
+
+        input = np.load(input)[np.newaxis, ...].astype(np.float32)
+        target = np.load(target)[np.newaxis, ...].astype(np.float32)
+        predata = np.load(predata)[np.newaxis, ...].astype(np.float32)
+
+        if self.use_cond:
+            cond = np.load(cond).astype(np.float32)
+            cond = transform.resize(cond, (512, 512), order=3)
+            cond = cond[np.newaxis, ...]
+            cond = self.norm_(cond, self.norm_min, self.norm_max)
+        else:
+            cond = predata
+
+        input = self.norm_(input, self.norm_min, self.norm_max)
+        target = self.norm_(target, self.norm_min, self.norm_max)
+        predata = self.norm_(predata, self.norm_min, self.norm_max)
+
+        if self.mode == 'train':
+            return target, cond
+        elif self.mode == 'test':
+            return input, target, predata, cond
 
 # trainer class
 
@@ -901,7 +1114,16 @@ class Trainer:
         inception_block_idx = 2048,
         max_grad_norm = 1.,
         num_fid_samples = 50000,
-        save_best_and_latest_only = False
+        save_best_and_latest_only = False,
+
+        mode = 'train',
+        dataset = 'mayo2016',
+        dose = 0,
+        context = False,
+        image_size = 512,
+        cond_size = 256,
+        use_cond = False,
+        resume_step = 0,
     ):
         super().__init__()
 
@@ -931,7 +1153,7 @@ class Trainer:
 
         self.batch_size = train_batch_size
         self.gradient_accumulate_every = gradient_accumulate_every
-        assert (train_batch_size * gradient_accumulate_every) >= 16, f'your effective batch size (train_batch_size x gradient_accumulate_every) should be at least 16 or above'
+        # assert (train_batch_size * gradient_accumulate_every) >= 16, f'your effective batch size (train_batch_size x gradient_accumulate_every) should be at least 16 or above'
 
         self.train_num_steps = train_num_steps
         self.image_size = diffusion_model.image_size
@@ -940,9 +1162,26 @@ class Trainer:
 
         # dataset and dataloader
 
-        self.ds = Dataset(folder, self.image_size, augment_horizontal_flip = augment_horizontal_flip, convert_image_to = convert_image_to)
-
-        assert len(self.ds) >= 100, 'you should have at least 100 images in your folder. at least 10k images recommended'
+        # self.ds = Dataset(folder, self.image_size, augment_horizontal_flip = augment_horizontal_flip, convert_image_to = convert_image_to)
+        # assert len(self.ds) >= 100, 'you should have at least 100 images in your folder. at least 10k images recommended'
+        if dataset == 'mayo2016':
+            self.ds = Mayo2016_Dataset(
+                folder,
+                mode=mode,
+                dose=dose,
+                use_cond=use_cond,
+                context=context,
+                image_size=image_size
+            )
+        else:
+            self.ds = Mayo2020_Dataset(
+                folder,
+                mode='test',
+                context=context,
+                use_cond=use_cond,
+                image_size=image_size,
+                cond_size=cond_size
+            )
 
         dl = DataLoader(self.ds, batch_size = train_batch_size, shuffle = True, pin_memory = True, num_workers = cpu_count())
 
@@ -1052,10 +1291,19 @@ class Trainer:
                 total_loss = 0.
 
                 for _ in range(self.gradient_accumulate_every):
-                    data = next(self.dl).to(device)
+                    data = next(self.dl)#.to(device)
+
+                    target, cond_input = data
+                    target, cond_input = target.to(device), cond_input.to(device)
+
+                    if self.use_cond:
+                        cond = F.interpolate(cond_input, size=None, scale_factor=(2, 2), mode='bicubic',
+                                             align_corners=False, recompute_scale_factor=False)
+                    else:
+                        cond = None
 
                     with self.accelerator.autocast():
-                        loss = self.model(data)
+                        loss = self.model(target, cond)
                         loss = loss / self.gradient_accumulate_every
                         total_loss += loss.item()
 
@@ -1104,3 +1352,79 @@ class Trainer:
                 pbar.update(1)
 
         accelerator.print('training complete')
+
+    def test(self):
+        self.model.eval()
+        if self.test_dataset == 'mayo2016':
+            patient_ids = [143, 506]
+        elif self.test_dataset == 'mayo2020':
+            patient_ids = ['C052', 'C232', 'C016', 'C120', 'C050', 'L077', 'L056', 'L186', 'L006', 'L148']
+        if not self.use_cond:
+            save_root = osp.join(self.folder, f'Dataset/phase_two/cond_{self.test_dataset}/')
+            os.makedirs(save_root, exist_ok=True)
+
+        num = 0
+        psnr_ori, ssim_ori, rmse_ori = 0., 0., 0.
+        psnr_pre, ssim_pre, rmse_pre = 0., 0., 0.
+        psnr_out, ssim_out, rmse_out = 0., 0., 0.
+        for low_dose, full_dose, pre_data, cond_input in tqdm(self.ds, desc='test'):
+            low_dose, full_dose, pre_data, cond_input = low_dose.cuda(), full_dose.cuda(), pre_data.cuda(), cond_input.cuda()
+
+            if not self.use_cond:
+                cond = None
+            else:
+                cond = cond_input * 2 - 1
+
+            gen_full_dose = self.model.sample(
+                batch_size = 1,
+                cond = cond,
+                init_img = pre_data * 2 - 1,
+                low_dose = low_dose * 2 - 1,
+            )
+
+            if not self.use_cond:
+                if self.test_dataset == 'mayo2016':
+                    if num < 583:
+                        id = patient_ids[0]
+                        slice = num + 1
+                    else:
+                        id = patient_ids[1]
+                        slice = num - 583 + 1
+                elif self.test_dataset == 'mayo2020':
+                    n = num // 80
+                    id = patient_ids[n]
+                    slice = idx % 80
+
+                gen_full_dose = transfer_HU(gen_full_dose)
+                if self.test_dataset == 'mayo2016':
+                    file_name = osp.join(save_root, 'L{:03d}_{:0>3d}_{:d}_img.npy'.format(id, slice, self.dose))
+                elif self.test_dataset == 'mayo2020':
+                    file_name = osp.join(save_root, '{}_{:0>3d}_img.npy'.format(id, slice))
+                np.save(file_name, gen_full_dose.squeeze_().cpu().detach().numpy() + 1024)
+                num += 1
+            else:
+                low_dose = transfer_calculate_window(low_dose)
+                full_dose = transfer_calculate_window(full_dose)
+                gen_full_dose = transfer_calculate_window(gen_full_dose)
+                pre_data = transfer_calculate_window(pre_data)
+
+                data_range = full_dose.max() - full_dose.min()
+                psnr_ori_score, ssim_ori_score, rmse_ori_score = compute_measure(full_dose, low_dose, data_range)
+                psnr_pre_score, ssim_pre_score, rmse_pre_score = compute_measure(full_dose, pre_data, data_range)
+                psnr_out_score, ssim_out_score, rmse_out_score = compute_measure(full_dose, gen_full_dose, data_range)
+
+                psnr_ori += psnr_ori_score / len(self.test_loader)
+                ssim_ori += ssim_ori_score / len(self.test_loader)
+                rmse_ori += rmse_ori_score / len(self.test_loader)
+
+                psnr_pre += psnr_pre_score / len(self.test_loader)
+                ssim_pre += ssim_pre_score / len(self.test_loader)
+                rmse_pre += rmse_pre_score / len(self.test_loader)
+
+                psnr_out += psnr_out_score / len(self.test_loader)
+                ssim_out += ssim_out_score / len(self.test_loader)
+                rmse_out += rmse_out_score / len(self.test_loader)
+
+        print('psnr_low:{:.2f}, ssim_ori:{:.4f}, rmse_ori:{:.2f}'.format(psnr_ori, ssim_ori, rmse_ori))
+        print('psnr_pre:{:.2f}, ssim_pre:{:.4f}, rmse_pre:{:.2f}'.format(psnr_pre, ssim_pre, rmse_pre))
+        print('psnr_out:{:.2f}, ssim_out:{:.4f}, rmse_out:{:.2f}'.format(psnr_out, ssim_out, rmse_out))
