@@ -33,7 +33,8 @@ DGDiff is a doubly guided diffusion model designed for reconstruction image refi
 Once the SPDiff model has been trained and the first phase of data has been saved, follow these steps to train the doubly guided diffusion model (DGDiff):
 ```
 cd DGDiff
-sh train_DGDiff.sh
+sh train_DGDiff_stage1.sh
+sh train_DGDiff_stage2.sh
 ```
 #### Running Inference and Saving Phase Two Data
 After training the DGDiff model, you can perform inference and save the second phase of data by executing the following script:
