@@ -1087,6 +1087,13 @@ class Mayo2016_Dataset(Dataset):
         elif self.mode == 'test':
             return input, target, predata, cond
 
+def transfer_calculate_window(img, MIN_B=-1024, MAX_B=3072, cut_min=-1000, cut_max=1000):
+    img = img * (MAX_B - MIN_B) + MIN_B
+    img[img < cut_min] = cut_min
+    img[img > cut_max] = cut_max
+    img = 255 * (img - cut_min) / (cut_max - cut_min)
+    return img
+
 # trainer class
 
 class Trainer:
