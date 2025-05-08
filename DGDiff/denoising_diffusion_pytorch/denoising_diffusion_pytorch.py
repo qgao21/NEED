@@ -32,6 +32,8 @@ from denoising_diffusion_pytorch.attend import Attend
 
 from denoising_diffusion_pytorch.version import __version__
 
+from diffusers.schedulers import DPMSolverMultistepScheduler 
+
 import os.path as osp
 from glob import glob
 
@@ -856,6 +858,46 @@ class GaussianDiffusion(Module):
         ret = self.unnormalize(ret)
         return ret
 
+    # add DPM-Solver for selection
+    @torch.inference_mode()
+    def dpm_solver(self, shape, cond, init_img, dose, part, return_all_timesteps=False):  
+        batch, device = shape[0], self.device
+        self_cond = x_start if self.self_condition else None
+         
+        scheduler = DPMSolverMultistepScheduler(  
+            beta_start=getattr(self, 'beta_start', 0.00085), 
+            beta_end=getattr(self, 'beta_end', 0.012),  
+            beta_schedule=getattr(self, 'beta_schedule', "linear"),
+            num_train_timesteps=self.num_timesteps,
+            solver_order=2,
+            algorithm_type="dpmsolver++", 
+        ) 
+        alphas_cumprod_calculated = self.alphas_cumprod
+        
+        scheduler.alphas_cumprod = alphas_cumprod_calculated.cpu()
+        scheduler.set_timesteps(self.sampling_timesteps, device=device)  
+        timesteps = scheduler.timesteps
+ 
+        img = torch.randn(shape, device=device)
+        imgs = [img] if return_all_timesteps else None
+        
+        for t in timesteps:
+            time_cond = torch.full((batch,), t, device=device, dtype=torch.long)
+            pred_noise, x_start, *_ = self.model_predictions(img, cond, time_cond, self_cond, clip_x_start=True, rederive_pred_noise=True)
+ 
+            scheduler_output = scheduler.step(pred_noise, t, img)
+            img = scheduler_output.prev_sample
+
+            if return_all_timesteps:
+                imgs.append(img)
+  
+        ret = img
+        if return_all_timesteps:
+            ret = torch.stack(imgs, dim=1)
+ 
+        ret = self.unnormalize(ret)
+        return ret
+
     @torch.inference_mode()
     def sample(self, batch_size = 16, cond = None, init_img = None, low_dose = None, return_all_timesteps = False):
         (h, w), channels = self.image_size, self.channels
@@ -865,7 +907,10 @@ class GaussianDiffusion(Module):
             sample_fn = self.p_sample_loop_improved
             return sample_fn((batch_size, channels, image_size, image_size), cond, init_img, low_dose, return_all_timesteps=return_all_timesteps)
         else:
-            sample_fn = self.ddim_sample_improved
+            if self.sampler_ == 'ddim':
+                sample_fn = self.ddim_sample_improved
+            elif self.sampler_ == 'dpm_solver':
+                sample_fn = self.dpm_solver
             return sample_fn((batch_size, channels, image_size, image_size), cond, return_all_timesteps=return_all_timesteps)
 
     @torch.inference_mode()
