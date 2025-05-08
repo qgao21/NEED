@@ -17,7 +17,8 @@ def main(args):
         image_size=args.image_size,
         timesteps=1000,
         sampling_timesteps=args.sampling_steps,
-        ddim_sampling_eta=0.0
+        ddim_sampling_eta=0.0,
+        sampler_=args.sampler_
     )
 
     trainer = Trainer(
@@ -71,6 +72,8 @@ if __name__ == "__main__":
     parser.add_argument('--cond_size', type=int, default=256)
     parser.add_argument('--sampling_steps', type=int, default=30)
     parser.add_argument('--use_cond', action='store_true')
+    parser.add_argument('--sampler_', type=str, default='ddim',
+                       help='ddim or dpm_solver')
 
     args = parser.parse_args()
     main(args)
