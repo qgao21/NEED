@@ -506,7 +506,8 @@ class GaussianDiffusion(Module):
         offset_noise_strength = 0.,  # https://www.crosslabs.org/blog/diffusion-with-offset-noise
         min_snr_loss_weight = False, # https://arxiv.org/abs/2303.09556
         min_snr_gamma = 5,
-        immiscible = False
+        immiscible = False,
+        sampler_ = 'ddim'
     ):
         super().__init__()
         assert not (type(self) == GaussianDiffusion and model.channels != model.out_dim)
@@ -612,6 +613,8 @@ class GaussianDiffusion(Module):
 
         self.normalize = normalize_to_neg_one_to_one if auto_normalize else identity
         self.unnormalize = unnormalize_to_zero_to_one if auto_normalize else identity
+
+        self.sampler_ = sampler_
 
     @property
     def device(self):
