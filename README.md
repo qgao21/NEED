@@ -1,5 +1,5 @@
 # Noise-Inspired Diffusion Model for Generalizable Low-Dose CT Reconstruction
-This is the official implementation of the paper "Noise-Inspired Diffusion Model for Generalizable Low-Dose CT Reconstruction". The pre-print version can be found in [arxiv](https://arxiv.org/abs/2506.22012)
+This is the official implementation of the paper "Noise-Inspired Diffusion Model for Generalizable Low-Dose CT Reconstruction". The pre-print version can be found in [arxiv](https://arxiv.org/abs/2506.22012).
 
 ## Updates
 - Dec, 2024: initial commit.
