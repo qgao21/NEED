@@ -1,5 +1,5 @@
 # Noise-Inspired Diffusion Model for Generalizable Low-Dose CT Reconstruction
-This is the official implementation of the paper "Noise-Inspired Diffusion Model for Generalizable Low-Dose CT Reconstruction".
+This is the official implementation of the paper "Noise-Inspired Diffusion Model for Generalizable Low-Dose CT Reconstruction". The pre-print version can be found in [arxiv](https://arxiv.org/abs/2506.22012)
 
 ## Updates
 - Dec, 2024: initial commit.
@@ -62,3 +62,14 @@ sh test_DGDiff.sh
 ## Acknowledge
 - Our codebase builds heavily on [denoising-diffusion-pytorch](https://github.com/lucidrains/denoising-diffusion-pytorch), [Cold Diffusion](https://github.com/arpitbansal297/Cold-Diffusion-Models), and, [DU-GAN](https://github.com/Hzzone/DU-GAN). Thanks for open-sourcing!
 - We use the [ASTRA Toolbox](https://astra-toolbox.com/) for low-dose CT data simulation and leverage the [TorchRadon Toolbox](https://github.com/matteo-ronchetti/torch-radon) for fast FBP reconstruction. Thank you for open-sourcing these valuable tools!
+
+## Citation
+If you find our work and code helpful, please kindly cite the corresponding paper:
+```
+@article{gao2025noise,
+  title={Noise-Inspired Diffusion Model for Generalizable Low-Dose CT Reconstruction},
+  author={Gao, Qi and Chen, Zhihao and Zeng, Dong, and Zhang, Junping, and Ma, Jianhua, and Shan, Hongming},
+  journal={Medical Image Analysis},
+  year={2025}
+}
+```
